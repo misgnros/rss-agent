@@ -7,9 +7,10 @@ This repository contains a CLI tool (`rss_agent_cli.py`) that reads RSS/Atom fee
 2. Preprocess each entry (clean HTML, extract keywords, measure length).
 3. Store articles in SQLite when they are loaded for the first time.
 4. For each agent, call Google Gemini and print the generated comment.
+5. Utilize `LangGraph` to orchestrate interactions between multiple AI agents.
 
 ## Usage
-Prerequisites: Python 3.11+, a Google API key for Gemini(please modify codes when you use other models).
+Prerequisites: Python 3.11+, a Google API key for Gemini (please modify codes when you use other models).
 
 1. Install
 ```bash
@@ -40,7 +41,7 @@ AGENTS = [
     ("Neutral Summarizer", "Summarize the main points objectively in 2-3 sentences."),
 ]
 ```
-*Example is written in Japanese
+*Example is written in Japanese.
 
 4. Run
 ```bash
