@@ -6,15 +6,15 @@ This repository contains a CLI tool (`rss_agent_cli.py`) that reads RSS/Atom fee
 1. Parse configured RSS feeds with `feedparser`.
 2. Preprocess each entry (clean HTML, extract keywords, measure length).
 3. Store articles in SQLite when they are loaded for the first time.
-4. For each agent, call Google Gemini and print the generated comment.
-5. Utilize `LangGraph` to orchestrate interactions between multiple AI agents.
+4. For each agent, call Google Gemini and print the generated comment using the article's summary.
+5. Utilize `LangGraph` to define the article processing workflow, including preprocessing and comment generation steps.
 
 ## Usage
 Prerequisites: Python 3.11+, a Google API key for Gemini (please modify codes when you use other models).
 
 1. Install
 ```bash
-git clone https://github.com/misgnros/rss_agent.git
+git clone https://github.com/misgnros/rss-agent.git
 cd rss_agent
 ```
 
