@@ -24,6 +24,10 @@ from config import (
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
+# Rebuttal feature flags (kept local to minimize config changes)
+ENABLE_REBUTTALS = True
+MAX_REBUTTALS_PER_AGENT = 2
+
 @contextmanager
 def get_db_connection():
     """Manage database connection with context manager"""
@@ -177,6 +181,7 @@ async def generate_comment(state: ArticleState, agent_name: str, instruction: st
             prompt = f"""
 あなたは{agent_name}です。
 以下の記事に対して、{instruction}
+日本語100字程度で端的に。回答に文字数は含めないでください。また、出力はプレーンテキストで、Markdownの記法を含めないでください。
 
 記事タイトル: {state['title']}
 キーワード: {', '.join(state.get('keywords', []))}
@@ -198,6 +203,52 @@ async def generate_comment(state: ArticleState, agent_name: str, instruction: st
                 retry_delay *= 2  # Exponential backoff
             else:
                 return f"[Error: Failed to generate comment ({type(e).__name__})]"
+
+async def generate_rebuttal(state: ArticleState, agent_name: str, target_agent_name: str, target_comment: str, instruction: str) -> str:
+    """Generate a rebuttal from one agent to another agent's comment"""
+    max_retries = 3
+    retry_delay = 2
+
+    for attempt in range(max_retries):
+        try:
+            content_preview = state['cleaned_content'][:500]
+
+            prompt = f"""
+あなたは{agent_name}です。
+以下の記事に対する{target_agent_name}のコメントに、根拠に基づく反論を簡潔に述べてください。
+あなたの基本的役割: {instruction}
+日本語100字程度で端的に。回答に文字数は含めないでください。また、出力はプレーンテキストで、Markdownの記法を含めないでください。
+
+制約:
+- 事実に基づく反論を行う
+- 記事内容と{target_agent_name}の主張の具体点に言及する
+- 本質的に同意の場合は「条件付きの同意」として補足を述べる
+- 100字程度で端的に述べる
+
+記事タイトル: {state['title']}
+キーワード: {', '.join(state.get('keywords', []))}
+記事内容（抜粋）: {content_preview}
+
+{target_agent_name}のコメント:
+```{(target_comment or '')[:800]}```
+"""
+
+            model = genai.GenerativeModel(GEMINI_MODEL)
+            response = await model.generate_content_async(prompt)
+
+            if not response or not response.text:
+                raise ValueError("Empty response received")
+
+            return response.text.strip()
+
+        except Exception as e:
+            print(f"Rebuttal generation error ({agent_name}→{target_agent_name}) - Attempt {attempt + 1}/{max_retries}: {e}")
+
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                return f"[Error: Failed to generate rebuttal ({type(e).__name__})]"
 
 async def process_article(state: ArticleState) -> dict:
     """Process article and generate comments"""
@@ -242,13 +293,43 @@ async def process_article(state: ArticleState) -> dict:
             comment = await generate_comment(state, agent_name, instruction)
             comments[agent_name] = comment
             await asyncio.sleep(API_CALL_DELAY)
-        
-        # Display comments
+
+        # Normalize comments to object form for rebuttals
+        for _agent_name, value in list(comments.items()):
+            if isinstance(value, str):
+                comments[_agent_name] = {"main": value, "rebuttals": {}}
+
+        # Rebuttal phase (optional)
+        if ENABLE_REBUTTALS and len(AGENTS) > 1:
+            print("\n[Generating Rebuttals]")
+            for agent_name, instruction in AGENTS:
+                # Targets are other agents
+                targets = [t for t, _ in AGENTS if t != agent_name]
+                for target_agent_name in targets[:MAX_REBUTTALS_PER_AGENT]:
+                    target_entry = comments.get(target_agent_name)
+                    target_main = target_entry.get("main") if isinstance(target_entry, dict) else target_entry
+                    if not target_main:
+                        continue
+                    print(f"  → {agent_name} rebutting {target_agent_name}...")
+                    rebuttal = await generate_rebuttal(state, agent_name, target_agent_name, target_main, instruction)
+                    if isinstance(comments.get(agent_name), dict):
+                        comments[agent_name]["rebuttals"][target_agent_name] = rebuttal
+                    await asyncio.sleep(API_CALL_DELAY)
+
+        # Display comments and rebuttals
         print(f"Article: {title}")
         print(f"Chars: {char_count} | Keywords: {', '.join(state.get('keywords', []))}")
-        for agent_name, comment in comments.items():
-            print(f"\n[{agent_name}]")
-            print(comment)
+        for agent_name, entry in comments.items():
+            if isinstance(entry, str):
+                print(f"\n[{agent_name}]")
+                print(entry)
+            else:
+                print(f"\n[{agent_name}]")
+                print(entry.get("main", ""))
+                if entry.get("rebuttals"):
+                    for target, rebuttal in entry["rebuttals"].items():
+                        print(f"\n  ↳ Rebuttal to [{target}]")
+                        print(f"  {rebuttal}")
             print(f"{'-'*60}")
             
     except Exception as e:
