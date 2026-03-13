@@ -19,14 +19,12 @@ from config import (
     AGENTS,
     GEMINI_MODEL,
     MAX_ARTICLES_PER_FEED,
-    API_CALL_DELAY
+    API_CALL_DELAY,
+    ENABLE_REBUTTALS,
+    MAX_REBUTTALS_PER_AGENT,
 )
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
-# Rebuttal feature flags (kept local to minimize config changes)
-ENABLE_REBUTTALS = True
-MAX_REBUTTALS_PER_AGENT = 2
 
 @contextmanager
 def get_db_connection():

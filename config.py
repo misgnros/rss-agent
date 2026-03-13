@@ -25,3 +25,7 @@ MAX_ARTICLES_PER_FEED = 1
 # NOTE: Free-tier Gemini API allows only ~5 requests/minute per model.
 # Increase delay to stay under the rate limit when comments+rebuttals are enabled.
 API_CALL_DELAY = 15
+
+# Rebuttal feature
+ENABLE_REBUTTALS = True
+MAX_REBUTTALS_PER_AGENT = 2
